@@ -143,6 +143,7 @@
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="com.oculus.intent.category.VR" />
             </intent-filter>
 
             <intent-filter>
@@ -257,6 +258,8 @@
         <meta-data
             android:name="android.game_mode_config"
             android:resource="@xml/game_mode_config" />
+
+        <meta-data android:name="com.samsung.android.vr.application.mode" android:value="vr_only"/>
     </application>
 
 </manifest>
