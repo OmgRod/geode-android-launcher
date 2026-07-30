@@ -31,6 +31,11 @@ object BaseRobTopActivity {
         me = WeakReference(currentActivity)
     }
 
+    @JvmStatic
+    fun getMe(): WeakReference<Activity>? {
+        return if (::me.isInitialized) me else null
+    }
+
     @SuppressLint("HardwareIds")
     @JvmStatic
     fun getUserID(): String {

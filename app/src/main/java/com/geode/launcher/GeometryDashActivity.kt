@@ -134,7 +134,8 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
 
     }
 
-    private fun launchQuestVRMode() {
+    @androidx.annotation.Keep
+    fun launchQuestVRMode() {
         startActivity(Intent(this, GeometryDashVRActivity::class.java))
     }
 

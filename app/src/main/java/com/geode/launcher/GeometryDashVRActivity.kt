@@ -95,15 +95,24 @@ class GeometryDashVRActivity : AppCompatActivity() {
 }
 
 object GeometryDashVRBridge {
-    @JvmStatic
-    external fun nativeOnCreate(surface: Surface)
 
     @JvmStatic
-    external fun nativeOnResume()
+    fun nativeOnCreate(surface: android.view.Surface) {
+        JniToCpp.vrActivityCreated(surface)
+    }
 
     @JvmStatic
-    external fun nativeOnPause()
+    fun nativeOnResume() {
+        JniToCpp.vrActivityResumed()
+    }
 
     @JvmStatic
-    external fun nativeOnDestroy()
+    fun nativeOnPause() {
+        JniToCpp.vrActivityPaused()
+    }
+
+    @JvmStatic
+    fun nativeOnDestroy() {
+        JniToCpp.vrActivityDestroyed()
+    }
 }

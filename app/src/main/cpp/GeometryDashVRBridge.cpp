@@ -16,73 +16,60 @@ std::mutex s_activityMtx;
 
 extern "C" {
 
-JNIEXPORT jobject JNICALL
-geode_vr_getActivityContext(JNIEnv* env) {
-    std::lock_guard<std::mutex> lock(s_activityMtx);
-    if (!s_activity) return nullptr;
-    return env->NewLocalRef(s_activity);
-}
-
 JNIEXPORT void JNICALL
-geode_vr_releaseActivityContext(JNIEnv* env, jobject localRef) {
-    if (localRef) env->DeleteLocalRef(localRef);
-}
-
-JNIEXPORT void JNICALL
-Java_com_geode_launcher_GeometryDashVRBridge_nativeOnCreate(
+Java_com_customRobTop_JniToCpp_vrActivityCreated(
         JNIEnv* env,
-        jobject thiz,
+        jclass,
         jobject surface)
 {
+    log::info("VR Activity created");
+
     if (!s_vm) {
         env->GetJavaVM(&s_vm);
     }
 
-    {
-        std::lock_guard<std::mutex> lock(s_activityMtx);
+    ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
 
-        if (s_activity) {
-            env->DeleteGlobalRef(s_activity);
-            s_activity = nullptr;
-        }
-
-        s_activity = env->NewGlobalRef(thiz);
-    }
-
-    log::info("GeometryDashVRBridge: nativeOnCreate — Activity stored, surface={}",
-              static_cast<void*>(surface));
-
-    (void)surface;
+    VRManager::get().setSurface(window);
+    VRManager::get().startVR();
 }
 
+
 JNIEXPORT void JNICALL
-Java_com_geode_launcher_GeometryDashVRBridge_nativeOnResume(
-        JNIEnv* /* env */,
-        jobject /* thiz */)
+Java_com_customRobTop_JniToCpp_vrActivityResumed(
+        JNIEnv*,
+        jclass)
 {
-    log::info("GeometryDashVRBridge: nativeOnResume");
+    log::info("VR Activity resumed");
+
+    VRManager::get().resume();
 }
 
+
 JNIEXPORT void JNICALL
-Java_com_geode_launcher_GeometryDashVRBridge_nativeOnPause(
-        JNIEnv* /* env */,
-        jobject /* thiz */)
+Java_com_customRobTop_JniToCpp_vrActivityPaused(
+        JNIEnv*,
+        jclass)
 {
-    log::info("GeometryDashVRBridge: nativeOnPause");
+    log::info("VR Activity paused");
+
+    VRManager::get().pause();
 }
 
+
 JNIEXPORT void JNICALL
-Java_com_geode_launcher_GeometryDashVRBridge_nativeOnDestroy(
+Java_com_customRobTop_JniToCpp_JniToCpp_vrActivityDestroyed(
         JNIEnv* env,
-        jobject /* thiz */)
+        jclass)
 {
-    log::info("GeometryDashVRBridge: nativeOnDestroy — releasing Activity reference");
+    log::info("VR Activity destroyed");
 
-    std::lock_guard<std::mutex> lock(s_activityMtx);
+    VRManager::get().stopVR();
+
     if (s_activity) {
         env->DeleteGlobalRef(s_activity);
         s_activity = nullptr;
     }
 }
 
-} // extern "C"
+}

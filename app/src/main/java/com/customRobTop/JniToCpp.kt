@@ -55,4 +55,16 @@ object JniToCpp {
 
     @JvmStatic
     external fun videoAdShowed()
+
+    @JvmStatic
+    external fun vrActivityCreated(surface: android.view.Surface)
+
+    @JvmStatic
+    external fun vrActivityResumed()
+
+    @JvmStatic
+    external fun vrActivityPaused()
+
+    @JvmStatic
+    external fun vrActivityDestroyed()
 }
