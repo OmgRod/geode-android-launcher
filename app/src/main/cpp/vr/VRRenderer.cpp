@@ -1,0 +1,110 @@
+#include "VRRenderer.hpp"
+#include "Shaders.hpp"
+
+void VRRenderer::initialise() {
+    m_roomShader = createProgram(CUBE_VERT_SHADER, ROOM_FRAG_SHADER);
+    
+    // Static Z here, uniform updated in renderEye
+    float z = -2.0f;
+    float quadVertices[] = {
+        -0.8f,  0.45f, z,    0.0f, 1.0f,
+        -0.8f, -0.45f, z,    0.0f, 0.0f,
+         0.8f, -0.45f, z,    1.0f, 0.0f,
+        -0.8f,  0.45f, z,    0.0f, 1.0f,
+         0.8f, -0.45f, z,    1.0f, 0.0f,
+         0.8f,  0.45f, z,    1.0f, 1.0f
+    };
+    glGenVertexArrays(1, &m_screenVAO);
+    GLuint vbo;
+    glGenBuffers(1, &vbo);
+    glBindVertexArray(m_screenVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    glBindVertexArray(0);
+    
+    glGenFramebuffers(1, &m_fbo);
+}
+
+void VRRenderer::setScreenDistance(float distance) {
+    m_screenDistance = distance;
+}
+
+void VRRenderer::renderEye(GLuint swapchainImage, GLuint gdTexture, const glm::mat4& view, const glm::mat4& proj) {
+    GLint previousFBO = 0;
+    GLint previousViewport[4]{};
+    GLint previousProgram = 0;
+    GLint previousActiveTexture = 0;
+    GLint previousTexture = 0;
+    GLfloat previousClearColor[4]{};
+
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFBO);
+    glGetIntegerv(GL_VIEWPORT, previousViewport);
+    glGetIntegerv(GL_CURRENT_PROGRAM, &previousProgram);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+    glActiveTexture(GL_TEXTURE0);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+    glGetFloatv(GL_COLOR_CLEAR_VALUE, previousClearColor);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, swapchainImage, 0);
+    glViewport(0, 0, 2048, 2048);
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glUseProgram(m_roomShader);
+    glUniformMatrix4fv(glGetUniformLocation(m_roomShader, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(m_roomShader, "projection"), 1, GL_FALSE, glm::value_ptr(proj));
+    glUniformMatrix4fv(glGetUniformLocation(m_roomShader, "model"), 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+    glUniform1f(glGetUniformLocation(m_roomShader, "screenDistance"), m_screenDistance);
+    glBindVertexArray(m_screenVAO);
+    glBindTexture(GL_TEXTURE_2D, gdTexture);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    glBindTexture(GL_TEXTURE_2D, previousTexture);
+    glActiveTexture(previousActiveTexture);
+    glBindVertexArray(0);
+    glUseProgram(previousProgram);
+    glClearColor(
+        previousClearColor[0], previousClearColor[1],
+        previousClearColor[2], previousClearColor[3]
+    );
+    glViewport(
+        previousViewport[0], previousViewport[1],
+        previousViewport[2], previousViewport[3]
+    );
+    glBindFramebuffer(GL_FRAMEBUFFER, previousFBO);
+}
+
+void VRRenderer::drawToScreen(GLuint gdTexture) {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, 1920, 1080);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(m_roomShader);
+    glBindVertexArray(m_screenVAO);
+    glBindTexture(GL_TEXTURE_2D, gdTexture);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+}
+
+GLuint VRRenderer::createProgram(const char* vert, const char* frag) {
+    GLuint v = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(v, 1, &vert, NULL);
+    glCompileShader(v);
+    GLuint f = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(f, 1, &frag, NULL);
+    glCompileShader(f);
+    GLuint p = glCreateProgram();
+    glAttachShader(p, v);
+    glAttachShader(p, f);
+    glLinkProgram(p);
+    return p;
+}
+
+void VRRenderer::shutdown() {
+    glDeleteProgram(m_roomShader);
+    glDeleteFramebuffers(1, &m_fbo);
+    glDeleteVertexArrays(1, &m_screenVAO);
+}

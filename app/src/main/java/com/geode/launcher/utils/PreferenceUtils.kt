@@ -149,6 +149,7 @@ class PreferenceUtils(private val sharedPreferences: SharedPreferences) {
         LAST_UPDATE_CHECK_TIME,
         LAST_LAUNCHER_UPDATE,
         DISABLE_UPDATE_CACHE,
+        VR_SCREEN_DISTANCE,
     }
 
     private fun defaultValueForBooleanKey(key: Key): Boolean {
@@ -162,6 +163,7 @@ class PreferenceUtils(private val sharedPreferences: SharedPreferences) {
     private fun defaultValueForIntKey(key: Key) = when (key) {
         Key.DISPLAY_MODE -> if (this.getBoolean(Key.LIMIT_ASPECT_RATIO)) 1 else 0
         Key.SCREEN_ZOOM -> 100
+        Key.VR_SCREEN_DISTANCE -> 100 // Scale 100, so 100 = 1.0
         Key.WAIT_PERIOD -> 3
         // people wanted a reset on nightly anyways, so this is a good excuse to do so
         else -> 0
@@ -199,6 +201,7 @@ class PreferenceUtils(private val sharedPreferences: SharedPreferences) {
             Key.LAST_UPDATE_CHECK_TIME -> "PreferenceLastUpdateCheckTime"
             Key.LAST_LAUNCHER_UPDATE -> "PreferenceLastLauncherUpdate"
             Key.DISABLE_UPDATE_CACHE -> "PreferenceDisableUpdateCache"
+            Key.VR_SCREEN_DISTANCE -> "PreferenceVRScreenDistance"
             // Key.RELEASE_CHANNEL -> "PreferenceReleaseChannel"
             // Key.LAST_DISMISSED_UPDATE -> "PreferenceLastDismissedUpdate"
             // Key.FORCE_HRR -> "PreferenceForceHighRefreshRate"

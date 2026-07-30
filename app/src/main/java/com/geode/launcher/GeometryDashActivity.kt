@@ -72,6 +72,10 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
     private var mIsOnPause = false
     private var mHasWindowFocus = false
 
+    // VR Surface stuff
+    private var mVRSurface: android.view.Surface? = null
+    private var mIsVRMode = false
+
     private var displayMode = DisplayMode.DEFAULT
     private var mForceRefreshRate = false
     private var mLimitedRefreshRate: Int? = null
@@ -97,7 +101,7 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
         } catch (e: UnsatisfiedLinkError) {
             Log.e("GeodeLauncher", "Library linkage failure", e)
 
-            // generates helpful information for use in debugging library load failures
+            // ... (rest of exception handling is the same)
             val gdPackageInfo = packageManager.getPackageInfo(Constants.PACKAGE_NAME, 0)
             val abiMismatch = GamePackageUtils.detectAbiMismatch(this, gdPackageInfo, e)
 
@@ -127,23 +131,71 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                mGLSurfaceView?.sendKeyBack()
+                if (mIsVRMode) {
+                   // VR-specific back logic if needed
+                } else {
+                   mGLSurfaceView?.sendKeyBack()
+                }
             }
         })
-        mGLSurfaceView?.manualBackEvents = true
+        
+        if (!mIsVRMode) {
+             mGLSurfaceView?.manualBackEvents = true
+        }
 
     }
 
-    @androidx.annotation.Keep
-    fun launchQuestVRMode() {
-        startActivity(Intent(this, GeometryDashVRActivity::class.java))
+    // VR Surface management merged from GeometryDashVRActivity
+    fun initVRMode() {
+        mIsVRMode = true
+        
+        // Remove existing views, setup VR surface
+        setContentView(createVrRenderSurface())
     }
 
-    private fun createVersionFile() {
-        val versionPath = File(filesDir, "game_version.txt")
-        val gameVersion = GamePackageUtils.getGameVersionCode(packageManager)
+    private fun createVrRenderSurface(): android.view.SurfaceView {
+        val surface = android.view.SurfaceView(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setZOrderOnTop(false)
+        }
+        
+        surface.holder.addCallback(object : android.view.SurfaceHolder.Callback {
+            override fun surfaceCreated(holder: android.view.SurfaceHolder) {
+                Log.i("GeodeLauncher/VR", "Surface ready — calling nativeOnCreate")
+                GeometryDashVRBridge.nativeOnCreate(holder.surface)
+            }
+            override fun surfaceChanged(holder: android.view.SurfaceHolder, format: Int, w: Int, h: Int) {}
+            override fun surfaceDestroyed(holder: android.view.SurfaceHolder) {
+                Log.i("GeodeLauncher/VR", "Surface destroyed")
+            }
+        })
+        return surface
+    }
 
-        versionPath.writeText("$gameVersion")
+    // VR Bridge
+    object GeometryDashVRBridge {
+        @JvmStatic
+        fun nativeOnCreate(surface: android.view.Surface) {
+            JniToCpp.vrActivityCreated(surface)
+        }
+
+        @JvmStatic
+        fun nativeOnResume() {
+            JniToCpp.vrActivityResumed()
+        }
+
+        @JvmStatic
+        fun nativeOnPause() {
+            JniToCpp.vrActivityPaused()
+        }
+
+        @JvmStatic
+        fun nativeOnDestroy() {
+            JniToCpp.vrActivityDestroyed()
+        }
     }
 
     private fun returnToMain(
@@ -453,6 +505,12 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
 
         if (mScreenZoom != 1.0f) {
             frameLayout.zoom = mScreenZoom
+        }
+
+        if (mIsVRMode) {
+             val vrSurface = createVrRenderSurface()
+             frameLayout.addView(vrSurface)
+             return frameLayout
         }
 
         val editTextLayoutParams = ViewGroup.LayoutParams(

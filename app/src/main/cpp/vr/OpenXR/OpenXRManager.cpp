@@ -1,0 +1,592 @@
+#define GLM_ENABLE_EXPERIMENTAL
+#include "OpenXRManager.hpp"
+#include <EGL/egl.h>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
+#include <dlfcn.h>
+#include "../log.hpp"
+
+bool OpenXRManager::createActions() {
+    XrActionSetCreateInfo actionSetInfo{XR_TYPE_ACTION_SET_CREATE_INFO};
+    strcpy(actionSetInfo.actionSetName, "vr_controls");
+    strcpy(actionSetInfo.localizedActionSetName, "VR Controls");
+    xrCreateActionSet(m_instance, &actionSetInfo, &m_actionSet);
+
+    XrActionCreateInfo actionInfo{XR_TYPE_ACTION_CREATE_INFO};
+    actionInfo.actionType = XR_ACTION_TYPE_BOOLEAN_INPUT;
+    strcpy(actionInfo.actionName, "toggle_ui");
+    strcpy(actionInfo.localizedActionName, "Toggle UI");
+    actionInfo.countSubactionPaths = 0;
+    actionInfo.subactionPaths = nullptr;
+    xrCreateAction(m_actionSet, &actionInfo, &m_yButtonAction);
+
+    XrPath oculusTouchPath;
+    xrStringToPath(m_instance, "/interaction_profiles/oculus/touch_controller", &oculusTouchPath);
+    XrPath yClickPath;
+    xrStringToPath(m_instance, "/interaction_profiles/oculus/touch_controller/input/y/click", &yClickPath);
+
+    XrActionSuggestedBinding bindings[] = {
+        {m_yButtonAction, yClickPath}
+    };
+
+    XrInteractionProfileSuggestedBinding suggestedBinding{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
+    suggestedBinding.interactionProfile = oculusTouchPath;
+    suggestedBinding.countSuggestedBindings = 1;
+    suggestedBinding.suggestedBindings = bindings;
+    xrSuggestInteractionProfileBindings(m_instance, &suggestedBinding);
+
+    XrSessionActionSetsAttachInfo attachInfo{XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
+    attachInfo.countActionSets = 1;
+    attachInfo.actionSets = &m_actionSet;
+    xrAttachSessionActionSets(m_session, &attachInfo);
+    
+    return true;
+}
+
+void OpenXRManager::syncActions() {
+    if (!m_running) return;
+    
+    XrActiveActionSet activeActionSet{m_actionSet, XR_NULL_PATH};
+    XrActionsSyncInfo syncInfo{XR_TYPE_ACTIONS_SYNC_INFO};
+    syncInfo.countActiveActionSets = 1;
+    syncInfo.activeActionSets = &activeActionSet;
+    xrSyncActions(m_session, &syncInfo);
+
+    XrActionStateGetInfo getInfo{XR_TYPE_ACTION_STATE_GET_INFO};
+    getInfo.action = m_yButtonAction;
+    XrActionStateBoolean state{XR_TYPE_ACTION_STATE_BOOLEAN};
+    xrGetActionStateBoolean(m_session, &getInfo, &state);
+    
+    m_yButtonState = (state.currentState == XR_TRUE);
+}
+
+bool OpenXRManager::initialise() {
+    m_running = false;
+    m_exitRequested = false;
+
+    // For this migration, let's assume a global reference for JavaVM
+    // This requires adding it to launcher-fix.cpp or similar
+    // For now, I will use a placeholder that will fail if JavaVM isn't globally available.
+    extern JavaVM* g_jvm; 
+    JavaVM* vm = g_jvm;
+    if (!vm) {
+        log::error("OpenXR: No JavaVM (ensure it is cached)");
+        return false;
+    }
+
+    JNIEnv* env = nullptr;
+    bool attached = false;
+
+    jint result = vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+
+    if (result == JNI_EDETACHED) {
+        if (vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
+            log::error("OpenXR: Failed attaching JNI");
+            return false;
+        }
+        attached = true;
+    }
+
+    if (!env) {
+        log::error("OpenXR: Invalid JNIEnv");
+        return false;
+    }
+
+    using GetCtxFn = jobject (*)(JNIEnv*);
+    auto getCtxFn = reinterpret_cast<GetCtxFn>(
+        dlsym(RTLD_DEFAULT, "geode_vr_getActivityContext")
+    );
+
+    jobject activity = nullptr;
+    if (getCtxFn) {
+        activity = getCtxFn(env);
+        if (activity) {
+            log::info("OpenXR: GeometryDashVRActivity obtained via launcher bridge");
+        } else {
+            log::warn("OpenXR: geode_vr_getActivityContext returned null — "
+                      "GeometryDashVRActivity may not have been created yet");
+        }
+    } else {
+        log::warn("OpenXR: geode_vr_getActivityContext not found in liblauncherfix.so "
+                  "(launcher version mismatch?) — falling back to Cocos context");
+    }
+
+    if (!activity) {
+        jclass activityClass = env->FindClass("org/cocos2dx/lib/Cocos2dxActivity");
+        if (activityClass && !env->ExceptionCheck()) {
+            jmethodID getContext = env->GetStaticMethodID(
+                activityClass, "getContext", "()Landroid/content/Context;"
+            );
+            if (getContext && !env->ExceptionCheck()) {
+                activity = env->CallStaticObjectMethod(activityClass, getContext);
+            }
+            if (env->ExceptionCheck()) env->ExceptionClear();
+            env->DeleteLocalRef(activityClass);
+        } else if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+        }
+        if (activity) {
+            log::info("OpenXR: Using Cocos2dxActivity.getContext() fallback");
+        }
+    }
+
+    if (!activity) {
+        log::error("OpenXR: Could not obtain an Android context");
+        if (attached) vm->DetachCurrentThread();
+        return false;
+    }
+    log::info("OpenXR: Android context acquired");
+
+    PFN_xrInitializeLoaderKHR initializeLoader = nullptr;
+
+    XrResult loaderResult =
+        xrGetInstanceProcAddr(
+            XR_NULL_HANDLE,
+            "xrInitializeLoaderKHR",
+            reinterpret_cast<PFN_xrVoidFunction*>(&initializeLoader)
+        );
+
+    if (XR_FAILED(loaderResult) || !initializeLoader) {
+        log::error("OpenXR: Missing xrInitializeLoaderKHR");
+        if (attached) vm->DetachCurrentThread();
+        return false;
+    }
+
+    XrLoaderInitInfoAndroidKHR loaderInfo{
+        XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR
+    };
+
+    loaderInfo.applicationVM = vm;
+    loaderInfo.applicationContext = activity;
+
+    XrResult initResult =
+        initializeLoader(
+            reinterpret_cast<const XrLoaderInitInfoBaseHeaderKHR*>(&loaderInfo)
+        );
+
+    log::info(
+        "OpenXR: Loader init result {}",
+        (int)initResult
+    );
+
+    if (XR_FAILED(initResult)) {
+        log::error("OpenXR: Loader failed");
+        env->DeleteLocalRef(activity);
+        if (attached) vm->DetachCurrentThread();
+        return false;
+    }
+
+
+    const char* extensions[] = {
+        XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME,
+        XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME
+    };
+
+
+    XrInstanceCreateInfo createInfo{
+        XR_TYPE_INSTANCE_CREATE_INFO
+    };
+
+
+    XrInstanceCreateInfoAndroidKHR androidInfo{
+        XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR
+    };
+
+
+    androidInfo.applicationVM = vm;
+    androidInfo.applicationActivity = activity;
+
+
+    createInfo.next = &androidInfo;
+
+    strcpy(
+        createInfo.applicationInfo.applicationName,
+        "Geometry Dash VR"
+    );
+
+    createInfo.applicationInfo.apiVersion =
+        XR_CURRENT_API_VERSION;
+
+
+    createInfo.enabledExtensionCount =
+        sizeof(extensions) / sizeof(char*);
+
+    createInfo.enabledExtensionNames =
+        extensions;
+
+
+
+    XrResult res =
+        xrCreateInstance(
+            &createInfo,
+            &m_instance
+        );
+
+
+    env->DeleteLocalRef(activity);
+    if (attached) vm->DetachCurrentThread();
+
+
+    if (XR_FAILED(res)) {
+        log::error(
+            "OpenXR: xrCreateInstance failed {}",
+            (int)res
+        );
+        return false;
+    }
+
+
+    log::info("OpenXR: Instance created");
+
+
+    XrSystemGetInfo systemInfo{
+        XR_TYPE_SYSTEM_GET_INFO
+    };
+
+    systemInfo.formFactor =
+        XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
+
+
+    res =
+        xrGetSystem(
+            m_instance,
+            &systemInfo,
+            &m_systemId
+        );
+
+
+    if (XR_FAILED(res)) {
+        log::error("OpenXR: xrGetSystem failed");
+        return false;
+    }
+
+
+    if (!createSession())
+        return false;
+
+
+    if (!createSwapchain())
+        return false;
+
+    if (!createActions())
+        return false;
+
+
+
+    XrReferenceSpaceCreateInfo spaceInfo{
+        XR_TYPE_REFERENCE_SPACE_CREATE_INFO
+    };
+
+
+    spaceInfo.referenceSpaceType =
+        XR_REFERENCE_SPACE_TYPE_LOCAL;
+
+
+    spaceInfo.poseInReferenceSpace.orientation.w = 1;
+
+
+    res =
+        xrCreateReferenceSpace(
+            m_session,
+            &spaceInfo,
+            &m_localSpace
+        );
+
+
+    if (XR_FAILED(res)) {
+        log::error("OpenXR: Failed creating space");
+        return false;
+    }
+
+
+    log::info(
+        "OpenXR: Initialised successfully"
+    );
+
+
+    return true;
+}
+
+bool OpenXRManager::createSession() {
+    XrGraphicsBindingOpenGLESAndroidKHR binding{XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR};
+    binding.display = eglGetCurrentDisplay();
+    binding.context = eglGetCurrentContext();
+    
+    EGLint configId;
+    eglQueryContext(binding.display, binding.context, EGL_CONFIG_ID, &configId);
+    
+    PFN_xrGetOpenGLESGraphicsRequirementsKHR pfnGetOpenGLESGraphicsRequirementsKHR = nullptr;
+    xrGetInstanceProcAddr(m_instance, "xrGetOpenGLESGraphicsRequirementsKHR", (PFN_xrVoidFunction*)&pfnGetOpenGLESGraphicsRequirementsKHR);
+    
+    if (pfnGetOpenGLESGraphicsRequirementsKHR) {
+        XrGraphicsRequirementsOpenGLESKHR graphicsRequirements{XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR};
+        XrResult reqRes = pfnGetOpenGLESGraphicsRequirementsKHR(m_instance, m_systemId, &graphicsRequirements);
+        if (XR_FAILED(reqRes)) {
+            log::error("OpenXR: xrGetOpenGLESGraphicsRequirementsKHR failed: {}", (int)reqRes);
+            return false;
+        }
+        log::info("OpenXR: Fetched graphics requirements successfully");
+    } else {
+        log::error("OpenXR: Failed to get xrGetOpenGLESGraphicsRequirementsKHR proc addr");
+        return false;
+    }
+    
+    EGLint numConfigs = 0;
+    EGLConfig config = 0;
+    EGLint attribs[] = { EGL_CONFIG_ID, configId, EGL_NONE };
+    eglChooseConfig(binding.display, attribs, &config, 1, &numConfigs);
+    
+    binding.config = config;
+    
+    XrSessionCreateInfo createInfo{XR_TYPE_SESSION_CREATE_INFO};
+    createInfo.next = &binding;
+    createInfo.systemId = m_systemId;
+    XrResult res = xrCreateSession(m_instance, &createInfo, &m_session);
+    if (XR_FAILED(res)) {
+        log::error("OpenXR: Failed to create session, error code: {}", (int)res);
+        return false;
+    }
+    
+    log::info("OpenXR: Session created successfully");
+    return true;
+}
+
+bool OpenXRManager::createSwapchain() {
+    m_eyes.resize(2);
+    uint32_t formatCount = 0;
+    xrEnumerateSwapchainFormats(m_session, 0, &formatCount, nullptr);
+    std::vector<int64_t> formats(formatCount);
+    xrEnumerateSwapchainFormats(m_session, formatCount, &formatCount, formats.data());
+    
+    int64_t selectedFormat = 0;
+    for (int64_t f : formats) {
+        if (f == 0x8058 /* GL_RGBA8 */ || f == 0x8C43 /* GL_SRGB8_ALPHA8 */) {
+            selectedFormat = f;
+            break;
+        }
+    }
+    if (selectedFormat == 0 && formatCount > 0) {
+        selectedFormat = formats[0];
+    }
+
+    XrSwapchainCreateInfo swapchainCreateInfo{XR_TYPE_SWAPCHAIN_CREATE_INFO};
+    swapchainCreateInfo.width = 2048; 
+    swapchainCreateInfo.height = 2048;
+    swapchainCreateInfo.format = selectedFormat;
+    swapchainCreateInfo.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
+    swapchainCreateInfo.sampleCount = 1;
+    swapchainCreateInfo.faceCount = 1;
+    swapchainCreateInfo.arraySize = 1;
+    swapchainCreateInfo.mipCount = 1;
+    
+    for (int i = 0; i < 2; ++i) {
+        XrResult res = xrCreateSwapchain(m_session, &swapchainCreateInfo, &m_eyes[i].swapchain);
+        if (XR_FAILED(res)) {
+            log::error("OpenXR: Failed to create swapchain for eye {}, error code: {}", i, (int)res);
+            return false;
+        }
+        
+        uint32_t imageCount;
+        xrEnumerateSwapchainImages(m_eyes[i].swapchain, 0, &imageCount, nullptr);
+        m_eyes[i].images.clear();
+        m_eyes[i].images.reserve(imageCount);
+        
+        std::vector<XrSwapchainImageOpenGLESKHR> images(imageCount, {XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR});
+        xrEnumerateSwapchainImages(m_eyes[i].swapchain, imageCount, &imageCount, (XrSwapchainImageBaseHeader*)images.data());
+        for(auto& img : images) m_eyes[i].images.push_back(img.image);
+    }
+    log::info("OpenXR: Swapchain created successfully");
+    return true;
+}
+
+bool OpenXRManager::waitFrame(bool* shouldRender, XrTime* displayTime) {
+    if (!m_running) return false;
+
+    XrFrameWaitInfo info{XR_TYPE_FRAME_WAIT_INFO};
+    XrFrameState state{XR_TYPE_FRAME_STATE};
+    if (XR_FAILED(xrWaitFrame(m_session, &info, &state))) return false;
+    m_predictedDisplayTime = state.predictedDisplayTime;
+    *displayTime = m_predictedDisplayTime;
+    *shouldRender = (state.shouldRender == XR_TRUE);
+    return true;
+}
+
+bool OpenXRManager::beginFrame() {
+    XrFrameBeginInfo info{XR_TYPE_FRAME_BEGIN_INFO};
+    const XrResult result = xrBeginFrame(m_session, &info);
+    if (XR_FAILED(result)) {
+        log::error("OpenXR: xrBeginFrame failed: {}", static_cast<int>(result));
+        return false;
+    }
+    return true;
+}
+
+void OpenXRManager::locateViews() {
+    XrViewLocateInfo locateInfo{XR_TYPE_VIEW_LOCATE_INFO};
+    locateInfo.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+    locateInfo.displayTime = m_predictedDisplayTime;
+    locateInfo.space = m_localSpace;
+
+    XrViewState viewState{XR_TYPE_VIEW_STATE};
+    uint32_t viewCountOutput;
+    std::vector<XrView> views(2, {XR_TYPE_VIEW});
+    xrLocateViews(m_session, &locateInfo, &viewState, 2, &viewCountOutput, views.data());
+
+    for (int i = 0; i < 2; ++i) {
+        m_eyes[i].view = views[i];
+        
+        float nearZ = 0.1f;
+        float farZ = 100.0f;
+        float l = tanf(views[i].fov.angleLeft) * nearZ;
+        float r = tanf(views[i].fov.angleRight) * nearZ;
+        float t = tanf(views[i].fov.angleUp) * nearZ;
+        float b = tanf(views[i].fov.angleDown) * nearZ;
+        m_eyes[i].projection = glm::frustum(l, r, b, t, nearZ, farZ);
+
+        XrPosef pose = views[i].pose;
+        glm::vec3 pos(pose.position.x, pose.position.y, pose.position.z);
+        glm::quat rot(pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z);
+        m_eyes[i].viewMatrix = glm::translate(glm::mat4_cast(glm::conjugate(rot)), -pos);
+    }
+}
+
+GLuint OpenXRManager::acquireImage(const EyeData& eye) {
+    XrSwapchainImageAcquireInfo acquire{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+    uint32_t index;
+    xrAcquireSwapchainImage(eye.swapchain, &acquire, &index);
+    XrSwapchainImageWaitInfo wait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+    wait.timeout = XR_INFINITE_DURATION;
+    xrWaitSwapchainImage(eye.swapchain, &wait);
+    return eye.images[index];
+}
+
+void OpenXRManager::releaseImage(const EyeData& eye) {
+    XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+    xrReleaseSwapchainImage(eye.swapchain, &release);
+}
+
+void OpenXRManager::submitFrame(const std::vector<EyeData>& eyes) {
+    XrCompositionLayerProjectionView projViews[2];
+    for (int i = 0; i < 2; ++i) {
+        projViews[i] = {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW};
+        projViews[i].pose = eyes[i].view.pose;
+        projViews[i].fov = eyes[i].view.fov;
+        projViews[i].subImage = {eyes[i].swapchain, {{0,0}, {2048,2048}}, 0};
+    }
+
+    XrCompositionLayerProjection projectionLayer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
+    projectionLayer.space = m_localSpace;
+    projectionLayer.viewCount = 2;
+    projectionLayer.views = projViews;
+
+    const XrCompositionLayerBaseHeader* layers[] = {
+        (const XrCompositionLayerBaseHeader*)&projectionLayer
+    };
+
+    XrFrameEndInfo endInfo{XR_TYPE_FRAME_END_INFO};
+    endInfo.displayTime = m_predictedDisplayTime;
+    endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+    endInfo.layerCount = 1;
+    endInfo.layers = layers;
+
+    xrEndFrame(m_session, &endInfo);
+}
+
+void OpenXRManager::submitEmptyFrame() {
+    XrFrameEndInfo endInfo{XR_TYPE_FRAME_END_INFO};
+    endInfo.displayTime = m_predictedDisplayTime;
+    endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+    endInfo.layerCount = 0;
+    endInfo.layers = nullptr;
+
+    xrEndFrame(m_session, &endInfo);
+}
+
+void OpenXRManager::shutdown() {
+    if (m_localSpace != XR_NULL_HANDLE) {
+        xrDestroySpace(m_localSpace);
+        m_localSpace = XR_NULL_HANDLE;
+    }
+    for (auto& eye : m_eyes) {
+        if (eye.swapchain != XR_NULL_HANDLE) {
+            xrDestroySwapchain(eye.swapchain);
+            eye.swapchain = XR_NULL_HANDLE;
+        }
+    }
+    m_eyes.clear();
+    if (m_session != XR_NULL_HANDLE) {
+        xrDestroySession(m_session);
+        m_session = XR_NULL_HANDLE;
+    }
+    if (m_instance != XR_NULL_HANDLE) {
+        xrDestroyInstance(m_instance);
+        m_instance = XR_NULL_HANDLE;
+    }
+    m_systemId = XR_NULL_SYSTEM_ID;
+    m_predictedDisplayTime = 0;
+    m_running = false;
+    m_exitRequested = false;
+}
+
+void OpenXRManager::pollEvents(bool wantsRunning) {
+    XrEventDataBuffer event{XR_TYPE_EVENT_DATA_BUFFER};
+    XrResult pollRes;
+    
+    while ((pollRes = xrPollEvent(m_instance, &event)) == XR_SUCCESS) {
+        log::info("OpenXR: Received event type: {}", (int)event.type);
+        
+        if (event.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED) {
+            const auto* sessionEvent = reinterpret_cast<const XrEventDataSessionStateChanged*>(&event);
+            log::info("OpenXR: Session state changed to {}", (int)sessionEvent->state);
+            
+            if (sessionEvent->state == XR_SESSION_STATE_READY && wantsRunning && !m_running) {
+                log::info("OpenXR: Session state READY, beginning session...");
+                XrSessionBeginInfo beginInfo{XR_TYPE_SESSION_BEGIN_INFO};
+                beginInfo.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+                XrResult beginRes = xrBeginSession(m_session, &beginInfo);
+                if (XR_FAILED(beginRes)) {
+                    log::error("OpenXR: Failed to begin session, error code: {}", (int)beginRes);
+                } else {
+                    log::info("OpenXR: Session begun successfully");
+                    m_running = true;
+                }
+            } else if (sessionEvent->state == XR_SESSION_STATE_READY) {
+                log::info("OpenXR: READY received with VR disabled; not beginning session");
+            } else if (sessionEvent->state == XR_SESSION_STATE_VISIBLE) {
+                log::info("OpenXR: Session is visible");
+            } else if (sessionEvent->state == XR_SESSION_STATE_FOCUSED) {
+                log::info("OpenXR: Session is focused");
+            } else if (sessionEvent->state == XR_SESSION_STATE_STOPPING) {
+                log::info("OpenXR: Session state STOPPING, ending session...");
+                if (m_running) {
+                    XrResult endRes = xrEndSession(m_session);
+                    if (XR_FAILED(endRes)) {
+                        log::error("OpenXR: xrEndSession failed: {}", static_cast<int>(endRes));
+                    }
+                }
+                m_running = false;
+            } else if (sessionEvent->state == XR_SESSION_STATE_EXITING || sessionEvent->state == XR_SESSION_STATE_LOSS_PENDING) {
+                log::info("OpenXR: Session exiting or loss pending");
+                m_running = false;
+                m_exitRequested = true;
+            }
+        }
+        event = {XR_TYPE_EVENT_DATA_BUFFER};
+    }
+    
+    if (pollRes != XR_EVENT_UNAVAILABLE) {
+        log::error("OpenXR: xrPollEvent failed with error code: {}", (int)pollRes);
+    }
+
+    syncActions();
+    
+    static int frameCounter = 0;
+    if (!m_running) {
+        if (++frameCounter % 60 == 0) {
+            log::info("OpenXR: Event loop pumping, waiting for session to become READY... (Currently not active)");
+        }
+    } else {
+        frameCounter = 0;
+    }
+}

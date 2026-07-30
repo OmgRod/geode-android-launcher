@@ -463,6 +463,17 @@ fun GameplaySettingsGroup() {
             )
         }
 
+        SettingsRangeCard(
+            title = stringResource(R.string.preference_vr_screen_distance_name),
+            description = stringResource(R.string.preference_vr_screen_distance_description),
+            dialogTitle = stringResource(R.string.preference_vr_screen_distance_select),
+            preferenceKey = PreferenceUtils.Key.VR_SCREEN_DISTANCE,
+            labelSuffix = "m",
+            range = 50..200,
+            scale = 100,
+            step = 10,
+        )
+
         val maxFrameRate = remember {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 context.display.supportedModes.maxOf { it.refreshRate }

@@ -2,6 +2,10 @@ package com.customRobTop
 
 @Suppress("unused", "KotlinJniMissingFunction")
 object JniToCpp {
+    init {
+        System.loadLibrary("launcherfix")
+    }
+    
     @JvmStatic
     external fun didCacheInterstitial(str: String?)
 
@@ -67,4 +71,19 @@ object JniToCpp {
 
     @JvmStatic
     external fun vrActivityDestroyed()
+
+    @JvmStatic
+    external fun startVR()
+
+    @JvmStatic
+    external fun pauseVR()
+
+    @JvmStatic
+    external fun resumeVR()
+
+    @JvmStatic
+    external fun stopVR()
+
+    @JvmStatic
+    external fun setScreenDistance(distance: Float)
 }

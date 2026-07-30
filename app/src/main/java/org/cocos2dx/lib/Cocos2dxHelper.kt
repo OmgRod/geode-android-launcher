@@ -73,7 +73,7 @@ object Cocos2dxHelper {
 
     @JvmStatic
     fun getDPI(): Int {
-        return BaseRobTopActivity.me.get()?.resources?.configuration?.densityDpi ?: -1
+        return BaseRobTopActivity.getMe()?.get()?.resources?.configuration?.densityDpi ?: -1
     }
 
     @JvmStatic

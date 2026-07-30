@@ -3,6 +3,15 @@
 
 #include "base.h"
 #include "log.hpp"
+#include "vr/HookManager.hpp"
+#include "patcher.hpp"
+
+JavaVM* g_jvm = nullptr;
+
+jint JNI_OnLoad(JavaVM* vm, void* reserved) {
+    g_jvm = vm;
+    return JNI_VERSION_1_6;
+}
 
 std::string DataPaths::original_data_path{};
 std::string DataPaths::data_path{};
@@ -45,6 +54,7 @@ JNIEXPORT void JNICALL Java_com_geode_launcher_LauncherFix_enableExceptionsRenam
 // this should be called after gd is loaded but before geode
 extern "C" JNIEXPORT void JNICALL Java_com_geode_launcher_LauncherFix_performPatches(JNIEnv*, jobject) {
     dl_iterate_phdr(on_dl_iterate, nullptr);
+    HookManager::init();
 }
 
 std::optional<std::string> redirect_path(const char* pathname) {
