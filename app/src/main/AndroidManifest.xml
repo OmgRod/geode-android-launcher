@@ -31,6 +31,15 @@
     <uses-feature
         android:name="android.hardware.gamepad"
         android:required="false" />
+    <uses-feature
+        android:name="android.hardware.vr.headtracking"
+        android:required="false"/>
+    <uses-feature
+        android:name="android.hardware.sensor.accelerometer"
+        android:required="false"/>
+    <uses-feature
+        android:name="android.hardware.sensor.gyroscope"
+        android:required="false"/>
 
     <application
         android:allowBackup="true"
@@ -131,6 +140,14 @@
             android:screenOrientation="landscape"
             android:theme="@style/Theme.NoActionBar.Fullscreen"
             android:windowSoftInputMode="stateAlwaysHidden">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+
+                <category android:name="android.intent.category.LAUNCHER"/>
+                <category android:name="org.khronos.openxr.intent.category.IMMERSIVE_HMD"/>
+            </intent-filter>
+
             <meta-data
                 android:name="android.app.lib_name"
                 android:value="cocos2dcpp" />
@@ -257,8 +274,6 @@
         <meta-data
             android:name="android.game_mode_config"
             android:resource="@xml/game_mode_config" />
-
-        <meta-data android:name="com.samsung.android.vr.application.mode" android:value="vr_dual"/>
     </application>
 
 </manifest>
