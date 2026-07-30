@@ -34,29 +34,18 @@ jobs:
         distribution: temurin
         cache: gradle
 
-    - name: Generate keystore file
-      run: echo ${{secrets.KEYSTORE_FILE}} | base64 -d > ~/release.keystore
-
     - name: Fix gradle permissions
       run: chmod +x ./gradlew
 
     - name: Build project (standard)
       if: ${{ matrix.config.flavor == 'standard' }}
       run: |
-        ./gradlew app:assembleStandard${{ matrix.config.name }} \
-          -Pandroid.injected.signing.store.file="$HOME/release.keystore" \
-          -Pandroid.injected.signing.store.password="${{secrets.KEYSTORE_PASSWORD}}" \
-          -Pandroid.injected.signing.key.alias="${{secrets.KEY_ALIAS}}" \
-          -Pandroid.injected.signing.key.password="${{secrets.KEY_PASSWORD}}"
+        ./gradlew app:assembleStandard${{ matrix.config.name }}
 
     - name: Build project (Google Play)
       if: ${{ matrix.config.flavor == 'googlePlay' }}
       run: |
-        ./gradlew app:bundleGooglePlayRelease -PdisableAbiSplits \
-          -Pandroid.injected.signing.store.file="$HOME/release.keystore" \
-          -Pandroid.injected.signing.store.password="${{secrets.KEYSTORE_PASSWORD}}" \
-          -Pandroid.injected.signing.key.alias="${{secrets.KEY_ALIAS}}" \
-          -Pandroid.injected.signing.key.password="${{secrets.KEY_PASSWORD}}"
+        ./gradlew app:bundleGooglePlayRelease -PdisableAbiSplits
 
     - name: Rename universal apk
       id: rename_apk_universal
