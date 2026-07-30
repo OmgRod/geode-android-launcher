@@ -29,8 +29,12 @@ android {
         @Suppress("UnstableApiUsage")
         externalNativeBuild {
             cmake {
-                arguments("-DANDROID_STL=c++_shared", "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=lld", "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld", "-DANDROID_LD=lld")
-                cppFlags("-fuse-ld=lld")
+                arguments(
+                    "-DANDROID_STL=c++_shared",
+                    "-DCMAKE_SHARED_LINKER_FLAGS_INIT=-fuse-ld=lld",
+                    "-DCMAKE_EXE_LINKER_FLAGS_INIT=-fuse-ld=lld",
+                    "-DCMAKE_MODULE_LINKER_FLAGS_INIT=-fuse-ld=lld"
+                )
             }
         }
 
@@ -129,4 +133,22 @@ dependencies {
     implementation ("androidx.browser:browser:1.10.0")
     debugImplementation ("androidx.compose.ui:ui-tooling")
     coreLibraryDesugaring ("com.android.tools:desugar_jdk_libs:2.1.5")
+}
+
+tasks.whenTaskAdded {
+    if (name.contains("CMake") && name.startsWith("build")) {
+        doFirst {
+            val cxxDir = file(".cxx")
+            if (cxxDir.exists()) {
+                cxxDir.walkTopDown().filter { it.name == "build.ninja" || it.name == "rules.ninja" }.forEach { ninjaFile ->
+                    var content = ninjaFile.readText()
+                    if (content.contains("-fuse-ld=gold")) {
+                        content = content.replace("-fuse-ld=gold", "-fuse-ld=lld")
+                        ninjaFile.writeText(content)
+                        println("Patched ${ninjaFile.absolutePath} to use lld")
+                    }
+                }
+            }
+        }
+    }
 }

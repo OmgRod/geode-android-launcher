@@ -149,7 +149,17 @@
                 android:name="com.oculus.vr.focusaware"
                 android:value="true" />
 
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="com.oculus.intent.category.VR" />
+            </intent-filter>
+
         </activity>
+        <activity
+            android:name=".GeometryDashVRActivity"
+            android:screenOrientation="landscape"
+            android:exported="false"
+            android:theme="@style/Theme.NoActionBar.Fullscreen" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

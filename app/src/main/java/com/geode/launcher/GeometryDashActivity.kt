@@ -131,6 +131,11 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
             }
         })
         mGLSurfaceView?.manualBackEvents = true
+
+    }
+
+    private fun launchQuestVRMode() {
+        startActivity(Intent(this, GeometryDashVRActivity::class.java))
     }
 
     private fun createVersionFile() {
@@ -524,6 +529,15 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
 
     private fun hideSystemUi() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        )
+
+        window.decorView.systemUiVisibility =
+            android.view.View.SYSTEM_UI_FLAG_FULLSCREEN or
+            android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
 
         WindowCompat.getInsetsController(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
