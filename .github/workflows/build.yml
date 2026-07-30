@@ -10,17 +10,9 @@ jobs:
     strategy:
       matrix:
         config:
-        - name: Release
-          lower: release
-          flavor: standard
-          
         - name: Debug
           lower: debug
           flavor: standard
-
-        - name: Release
-          lower: release
-          flavor: googlePlay
           
     runs-on: ubuntu-latest
 
