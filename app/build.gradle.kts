@@ -29,7 +29,8 @@ android {
         @Suppress("UnstableApiUsage")
         externalNativeBuild {
             cmake {
-                arguments("-DANDROID_STL=c++_shared")
+                arguments("-DANDROID_STL=c++_shared", "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=lld", "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld", "-DANDROID_LD=lld")
+                cppFlags("-fuse-ld=lld")
             }
         }
 

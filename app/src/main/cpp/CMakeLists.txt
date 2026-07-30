@@ -23,3 +23,8 @@ set_target_properties(launcherfix PROPERTIES
 )
 
 target_link_libraries(launcherfix PRIVATE log fmt::fmt)
+
+# AGP automatically injects -fuse-ld=gold on some versions, which is invalid on NDK 26+
+string(REPLACE "-fuse-ld=gold" "-fuse-ld=lld" CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
+string(REPLACE "-fuse-ld=gold" "-fuse-ld=lld" CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS}")
+string(REPLACE "-fuse-ld=gold" "-fuse-ld=lld" CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
