@@ -139,7 +139,7 @@ tasks.whenTaskAdded {
     if (name.contains("CMake") && name.startsWith("build")) {
         val cxxPath = project.file(".cxx").absolutePath
         doFirst {
-            val cxxDir = java.io.File(cxxPath)
+            val cxxDir = File(cxxPath)
             if (cxxDir.exists()) {
                 cxxDir.walkTopDown().filter { it.name == "build.ninja" || it.name == "rules.ninja" }.forEach { ninjaFile ->
                     var content = ninjaFile.readText()
