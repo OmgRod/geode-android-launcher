@@ -99,7 +99,7 @@ android {
         }
     }
     namespace = "com.geode.launcher"
-    ndkVersion = "29.0.14206865"
+    ndkVersion = "26.3.11579264"
 }
 
 dependencies {
