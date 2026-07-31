@@ -174,7 +174,7 @@ class DownloadableLoaderRelease(private val version: LoaderVersion) : Downloadab
     override fun getDownload(): DownloadableAsset {
         val filename = "geode-${version.tag}-${LaunchUtils.platformName}.zip"
         return DownloadableAsset(
-            url = "https://github.com/geode-sdk/geode/releases/download/${version.tag}/$filename",
+            url = "https://github.com/GeometryDashVR/geode/releases/download/${version.tag}/$filename",
             filename = filename
         )
     }
@@ -182,7 +182,7 @@ class DownloadableLoaderRelease(private val version: LoaderVersion) : Downloadab
     override fun getResourcesDownload(): DownloadableAsset {
         val filename = "resources.zip"
         return DownloadableAsset(
-            url = "https://github.com/geode-sdk/geode/releases/download/${version.tag}/resources.zip",
+            url = "https://github.com/GeometryDashVR/geode/releases/download/${version.tag}/resources.zip",
             filename = filename
         )
     }

@@ -86,6 +86,7 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
     override fun onCreate(savedInstanceState: Bundle?) {
         setupUIState()
         FMOD.init(this)
+        org.cocos2dx.lib.Cocos2dxActivity.setContext(this)
 
         super.onCreate(savedInstanceState)
 
@@ -153,8 +154,23 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
     fun initVRMode() {
         mIsVRMode = true
         
-        // Remove existing views, setup VR surface
-        setContentView(createVrRenderSurface())
+        // Show loading screen immediately
+        val loadingView = android.widget.FrameLayout(this).apply {
+            addView(android.widget.TextView(this@GeometryDashActivity).apply {
+                text = "Loading VR..."
+                gravity = android.view.Gravity.CENTER
+                setTextColor(android.graphics.Color.WHITE)
+            })
+        }
+        setContentView(loadingView)
+    }
+
+    // Called from JNI when the C++ hook is initialized and surface is ready
+    fun onNativeHookReady() {
+        Log.i("GeodeLauncher/VR", "Hook ready - swapping to VR Surface")
+        runOnUiThread {
+            setContentView(createVrRenderSurface())
+        }
     }
 
     private fun createVersionFile() {
@@ -175,8 +191,8 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
         
         surface.holder.addCallback(object : android.view.SurfaceHolder.Callback {
             override fun surfaceCreated(holder: android.view.SurfaceHolder) {
-                Log.i("GeodeLauncher/VR", "Surface ready - calling nativeOnCreate")
-                GeometryDashVRBridge.nativeOnCreate(holder.surface)
+                Log.i("GeodeLauncher/VR", "Surface ready - passing to VRBridge")
+                com.omgrod.gdvr.VRBridge.setSurfaceNative(holder.surface)
             }
             override fun surfaceChanged(holder: android.view.SurfaceHolder, format: Int, w: Int, h: Int) {}
             override fun surfaceDestroyed(holder: android.view.SurfaceHolder) {
@@ -184,24 +200,6 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
             }
         })
         return surface
-    }
-
-    // VR Bridge
-    object GeometryDashVRBridge {
-        @JvmStatic
-        external fun nativeOnCreate(surface: android.view.Surface)
-
-        @JvmStatic
-        fun nativeOnResume() {
-        }
-
-        @JvmStatic
-        fun nativeOnPause() {
-        }
-
-        @JvmStatic
-        fun nativeOnDestroy() {
-        }
     }
 
     private fun returnToMain(
