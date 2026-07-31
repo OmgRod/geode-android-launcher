@@ -3,7 +3,7 @@
 -keep class org.cocos2dx.lib.** { *; }
 -keep class com.customRobTop.** { *; }
 
--keepclassmembers class com.geode.launcher.GeometryDashActivity {
+-keepclassmembers class com.omgrod.gdvr.GeometryDashActivity {
     public void launchQuestVRMode();
 }
 

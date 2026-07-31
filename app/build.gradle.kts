@@ -16,7 +16,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.geode.launcher"
+        applicationId = "com.omgrod.gdvr"
         minSdk = 23
         targetSdk = 36
         versionCode = 29
@@ -65,7 +65,7 @@ android {
 
         create("googlePlay") {
             dimension = "distribution"
-            applicationId = "com.geode.launcher.play"
+            applicationId = "com.omgrod.gdvr.play"
             buildConfigField("boolean", "GOOGLE_PLAY_BUILD", "true")
         }
     }
@@ -103,7 +103,7 @@ android {
             path = file("src/main/cpp/CMakeLists.txt")
         }
     }
-    namespace = "com.geode.launcher"
+    namespace = "com.omgrod.gdvr"
     ndkVersion = "26.3.11579264"
 }
 

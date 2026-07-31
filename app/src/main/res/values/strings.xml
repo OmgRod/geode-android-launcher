@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name" translatable="false">Geode</string>
+    <string name="app_name" translatable="false">GDVR</string>
     <string name="no_activity_found">No activity found for this action.</string>
 
     <!-- MainActivity strings -->
@@ -8,7 +8,8 @@
     <string name="launcher_settings">Settings</string>
     <string name="launcher_download">Download</string>
     <string name="launcher_install">Install</string>
-    <string name="launcher_title">Geode</string>
+    <string name="launcher_title" translatable="false">GDVR</string>
+
     <string name="launcher_logo_alt">geode logo</string>
     <string name="launcher_launch_icon_alt">play icon</string>
     <string name="launcher_download_icon_alt">download icon</string>
