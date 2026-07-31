@@ -175,7 +175,7 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
         
         surface.holder.addCallback(object : android.view.SurfaceHolder.Callback {
             override fun surfaceCreated(holder: android.view.SurfaceHolder) {
-                Log.i("GeodeLauncher/VR", "Surface ready — calling nativeOnCreate")
+                Log.i("GeodeLauncher/VR", "Surface ready - calling nativeOnCreate")
                 GeometryDashVRBridge.nativeOnCreate(holder.surface)
             }
             override fun surfaceChanged(holder: android.view.SurfaceHolder, format: Int, w: Int, h: Int) {}

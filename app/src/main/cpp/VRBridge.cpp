@@ -49,7 +49,7 @@ private:
 extern "C" {
 
 JNIEXPORT void JNICALL
-Java_com_geode_launcher_GeometryDashActivity_00024GeometryDashVRBridge_nativeOnCreate(
+Java_com_omgrod_gdvr_GeometryDashActivity_00024GeometryDashVRBridge_nativeOnCreate(
     JNIEnv* env,
     jobject obj,
     jobject surface
@@ -58,7 +58,7 @@ Java_com_geode_launcher_GeometryDashActivity_00024GeometryDashVRBridge_nativeOnC
 }
 
 JNIEXPORT void JNICALL
-Java_com_geode_launcher_VRBridge_initVR(
+Java_com_omgrod_gdvr_VRBridge_initVR(
     JNIEnv* env,
     jobject obj,
     jint gdTextureId
@@ -67,7 +67,7 @@ Java_com_geode_launcher_VRBridge_initVR(
 }
 
 JNIEXPORT void JNICALL
-Java_com_geode_launcher_VRBridge_setScreenDistance(
+Java_com_omgrod_gdvr_VRBridge_setScreenDistance(
     JNIEnv* env,
     jobject obj,
     jfloat distance
@@ -76,7 +76,7 @@ Java_com_geode_launcher_VRBridge_setScreenDistance(
 }
 
 JNIEXPORT void JNICALL
-Java_com_geode_launcher_VRBridge_setVRActive(
+Java_com_omgrod_gdvr_VRBridge_setVRActive(
     JNIEnv* env,
     jobject obj,
     jboolean active

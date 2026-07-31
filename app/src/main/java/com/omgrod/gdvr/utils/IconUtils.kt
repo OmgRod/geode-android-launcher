@@ -1,0 +1,86 @@
+package com.omgrod.gdvr.utils
+
+import android.graphics.drawable.AdaptiveIconDrawable
+import android.os.Build
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.painterResource
+import androidx.core.content.res.ResourcesCompat
+import androidx.core.graphics.drawable.toBitmap
+import com.omgrod.gdvr.R
+import kotlinx.datetime.Month
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.todayIn
+import kotlin.time.Clock
+
+// https://gist.github.com/tkuenneth/ddf598663f041dc79960cda503d14448?permalink_comment_id=4660486#gistcomment-4660486
+@Composable
+fun adaptiveIconPainterResource(@DrawableRes id: Int): Painter {
+    val context = LocalContext.current
+    val res = LocalResources.current
+    val theme = context.theme
+
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val adaptiveIcon = remember(id) {
+            ResourcesCompat.getDrawable(res, id, theme) as? AdaptiveIconDrawable
+        }
+        if (adaptiveIcon != null) {
+            remember(id) {
+                BitmapPainter(adaptiveIcon.toBitmap().asImageBitmap())
+            }
+        } else {
+            painterResource(id)
+        }
+    } else {
+        painterResource(id)
+    }
+}
+
+enum class ApplicationIcon {
+    DEFAULT,
+    GEODE;
+
+    companion object {
+        fun fromId(id: String) = when (id) {
+            "default" -> DEFAULT
+            "geode" -> GEODE
+            else -> DEFAULT
+        }
+    }
+
+    fun toId() = when (this) {
+        GEODE -> "geode"
+        DEFAULT -> "default"
+    }
+}
+
+data class ApplicationIconDetails(
+    val id: String,
+    val component: String,
+    @param:DrawableRes val iconId: Int,
+    @param:StringRes val nameId: Int,
+)
+
+object IconUtils {
+    fun getIconDetails(id: ApplicationIcon) = when (id) {
+        ApplicationIcon.DEFAULT -> ApplicationIconDetails(
+            id = id.toId(),
+            component = "MainActivity",
+            iconId = R.mipmap.ic_launcher,
+            nameId = R.string.application_icon_default
+        )
+        ApplicationIcon.GEODE -> ApplicationIconDetails(
+            id = id.toId(),
+            component = "MainActivityGeode",
+            iconId = R.mipmap.ic_launcher_geode,
+            nameId = R.string.application_icon_geode
+        )
+    }
+}
